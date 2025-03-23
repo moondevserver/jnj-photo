@@ -173,8 +173,20 @@ export function FilesTable({
     setIsDetailOpen(true);
   };
 
-  const getFileIcon = (type: string) => {
-    if (type.startsWith("image/")) return <Image className="h-4 w-4" />;
+  const getFileIcon = (type: string, path: string) => {
+    if (type.startsWith("image/")) {
+      return viewMode === "list" ? (
+        <Image className="h-4 w-4" />
+      ) : (
+        <div className="relative w-full aspect-square bg-gray-100 rounded overflow-hidden">
+          <img
+            src={`/api/files/image?path=${encodeURIComponent(path)}&thumbnail=true`}
+            alt=""
+            className="object-cover w-full h-full"
+          />
+        </div>
+      );
+    }
     if (type === "application/zip") return <FileArchive className="h-4 w-4" />;
     return null;
   };
@@ -230,7 +242,7 @@ export function FilesTable({
           ) : (
             currentFiles.map((file) => (
               <TableRow key={file.path}>
-                <TableCell>{getFileIcon(file.type)}</TableCell>
+                <TableCell>{getFileIcon(file.type, file.path)}</TableCell>
                 <TableCell>
                   <button
                     className="hover:underline text-left"
@@ -267,35 +279,41 @@ export function FilesTable({
   );
 
   const renderGridView = () => (
-    <div className="grid grid-cols-6 gap-4">
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
       {currentFiles.map((file) => (
         <button
           key={file.path}
-          className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-center"
+          className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-center group"
           onClick={() => handleFileClick(file)}
         >
-          {getFileIcon(file.type)}
-          <div className="mt-2 text-sm truncate">{file.name}</div>
+          {getFileIcon(file.type, file.path)}
+          <div className="mt-2 text-sm truncate group-hover:text-blue-600">{file.name}</div>
         </button>
       ))}
     </div>
   );
 
   const renderCardView = () => (
-    <div className="grid grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
       {currentFiles.map((file) => (
         <button
           key={file.path}
-          className="p-4 rounded border hover:bg-gray-50 dark:hover:bg-gray-800"
+          className="relative overflow-hidden rounded-lg border hover:border-blue-500 transition-colors"
           onClick={() => handleFileClick(file)}
         >
-          <div className="flex items-center gap-2 mb-2">
-            {getFileIcon(file.type)}
-            <span className="truncate">{file.name}</span>
+          <div className="relative aspect-video w-full bg-gray-100">
+            <img
+              src={`/api/files/image?path=${encodeURIComponent(file.path)}`}
+              alt=""
+              className="object-cover w-full h-full"
+            />
           </div>
-          <div className="text-sm text-gray-500">
-            <div>{formatFileSize(file.size)}</div>
-            <div>{formatDate(file.updatedAt)}</div>
+          <div className="p-4 bg-white dark:bg-gray-800">
+            <div className="font-medium truncate mb-1">{file.name}</div>
+            <div className="text-sm text-gray-500 dark:text-gray-400">
+              <div>{formatFileSize(file.size)}</div>
+              <div>{formatDate(file.updatedAt)}</div>
+            </div>
           </div>
         </button>
       ))}

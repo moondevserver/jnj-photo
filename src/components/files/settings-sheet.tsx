@@ -87,7 +87,7 @@ export function SettingsSheet({
               </SelectTrigger>
               <SelectContent className="bg-white dark:bg-gray-800">
                 <SelectItem value="list">리스트</SelectItem>
-                <SelectItem value="grid">작은 아이콘</SelectItem>
+                <SelectItem value="grid">아이콘</SelectItem>
                 <SelectItem value="card">카드</SelectItem>
               </SelectContent>
             </Select>
