@@ -209,7 +209,26 @@ export function FilesTable({
   const currentFiles = sortedFiles.slice(startIndex, endIndex);
 
   const handleFileClick = async (file: FileInfo) => {
-    setSelectedFile(file);
+    if (isZipView) {
+      // ZIP 파일 내부의 파일인 경우 메타데이터 가져오기
+      try {
+        const response = await fetch(`/api/files/zip/metadata?path=${encodeURIComponent(path)}&entry=${encodeURIComponent(file.path)}`);
+        if (response.ok) {
+          const metadata = await response.json();
+          setSelectedFile({
+            ...file,
+            metadata,
+          });
+        } else {
+          setSelectedFile(file);
+        }
+      } catch (error) {
+        console.error("Error fetching ZIP file metadata:", error);
+        setSelectedFile(file);
+      }
+    } else {
+      setSelectedFile(file);
+    }
     setIsDetailOpen(true);
   };
 
