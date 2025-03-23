@@ -30,9 +30,11 @@ import { Button } from "@/components/ui/button";
 import { MoreHorizontal, Image, FileArchive, Info, RefreshCw, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { formatFileSize, formatDate } from "@/lib/utils";
 import { FileDetailDialog } from "./file-detail-dialog";
+import { SettingsSheet, ViewMode } from "./settings-sheet";
+import { useTheme } from "next-themes";
 
 // 환경 변수에서 페이지당 파일 개수 가져오기 (기본값: 20)
-const FILES_PER_PAGE = process.env.NEXT_PUBLIC_FILES_PER_PAGE ? parseInt(process.env.NEXT_PUBLIC_FILES_PER_PAGE) : 20;
+const DEFAULT_FILES_PER_PAGE = process.env.NEXT_PUBLIC_FILES_PER_PAGE ? parseInt(process.env.NEXT_PUBLIC_FILES_PER_PAGE) : 20;
 
 interface FileInfo {
   name: string;
@@ -93,6 +95,9 @@ export function FilesTable({
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
   const [currentPage, setCurrentPage] = useState(1);
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
+  const [filesPerPage, setFilesPerPage] = useState(DEFAULT_FILES_PER_PAGE);
+  const { theme, setTheme } = useTheme();
 
   const loadFiles = async () => {
     setIsLoading(true);
@@ -158,9 +163,9 @@ export function FilesTable({
   const sortedFiles = sortFiles(filteredFiles);
 
   // 페이지네이션 계산
-  const totalPages = Math.ceil(sortedFiles.length / FILES_PER_PAGE);
-  const startIndex = (currentPage - 1) * FILES_PER_PAGE;
-  const endIndex = startIndex + FILES_PER_PAGE;
+  const totalPages = Math.ceil(sortedFiles.length / filesPerPage);
+  const startIndex = (currentPage - 1) * filesPerPage;
+  const endIndex = startIndex + filesPerPage;
   const currentFiles = sortedFiles.slice(startIndex, endIndex);
 
   const handleFileClick = (file: FileInfo) => {
@@ -173,6 +178,129 @@ export function FilesTable({
     if (type === "application/zip") return <FileArchive className="h-4 w-4" />;
     return null;
   };
+
+  const renderListView = () => (
+    <div className="rounded-md border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>유형</TableHead>
+            <TableHead>
+              <button
+                className="flex items-center hover:text-gray-700"
+                onClick={() => handleSort("name")}
+              >
+                파일명 {getSortIcon("name")}
+              </button>
+            </TableHead>
+            <TableHead>
+              <button
+                className="flex items-center hover:text-gray-700"
+                onClick={() => handleSort("size")}
+              >
+                크기 {getSortIcon("size")}
+              </button>
+            </TableHead>
+            <TableHead>
+              <button
+                className="flex items-center hover:text-gray-700"
+                onClick={() => handleSort("createdAt")}
+              >
+                생성일 {getSortIcon("createdAt")}
+              </button>
+            </TableHead>
+            <TableHead>
+              <button
+                className="flex items-center hover:text-gray-700"
+                onClick={() => handleSort("updatedAt")}
+              >
+                수정일 {getSortIcon("updatedAt")}
+              </button>
+            </TableHead>
+            <TableHead className="w-[100px]">관리</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {currentFiles.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={6} className="text-center">
+                {searchTerm ? "검색 결과가 없습니다." : "파일이 없습니다."}
+              </TableCell>
+            </TableRow>
+          ) : (
+            currentFiles.map((file) => (
+              <TableRow key={file.path}>
+                <TableCell>{getFileIcon(file.type)}</TableCell>
+                <TableCell>
+                  <button
+                    className="hover:underline text-left"
+                    onClick={() => handleFileClick(file)}
+                  >
+                    {file.name}
+                  </button>
+                </TableCell>
+                <TableCell>{formatFileSize(file.size)}</TableCell>
+                <TableCell>{formatDate(file.createdAt)}</TableCell>
+                <TableCell>{formatDate(file.updatedAt)}</TableCell>
+                <TableCell>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" className="h-8 w-8 p-0">
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuLabel>작업</DropdownMenuLabel>
+                      <DropdownMenuItem onClick={() => handleFileClick(file)}>
+                        <Info className="mr-2 h-4 w-4" />
+                        상세 정보
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </TableCell>
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
+    </div>
+  );
+
+  const renderGridView = () => (
+    <div className="grid grid-cols-6 gap-4">
+      {currentFiles.map((file) => (
+        <button
+          key={file.path}
+          className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-center"
+          onClick={() => handleFileClick(file)}
+        >
+          {getFileIcon(file.type)}
+          <div className="mt-2 text-sm truncate">{file.name}</div>
+        </button>
+      ))}
+    </div>
+  );
+
+  const renderCardView = () => (
+    <div className="grid grid-cols-3 gap-4">
+      {currentFiles.map((file) => (
+        <button
+          key={file.path}
+          className="p-4 rounded border hover:bg-gray-50 dark:hover:bg-gray-800"
+          onClick={() => handleFileClick(file)}
+        >
+          <div className="flex items-center gap-2 mb-2">
+            {getFileIcon(file.type)}
+            <span className="truncate">{file.name}</span>
+          </div>
+          <div className="text-sm text-gray-500">
+            <div>{formatFileSize(file.size)}</div>
+            <div>{formatDate(file.updatedAt)}</div>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
 
   if (isLoading) {
     return (
@@ -194,15 +322,25 @@ export function FilesTable({
           onChange={(e) => setSearchTerm(e.target.value)}
           className="max-w-sm"
         />
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={loadFiles}
-          disabled={isLoading}
-          title="새로고침"
-        >
-          <RefreshCw className="h-4 w-4" />
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={loadFiles}
+            disabled={isLoading}
+            title="새로고침"
+          >
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+          <SettingsSheet
+            viewMode={viewMode}
+            setViewMode={setViewMode}
+            filesPerPage={filesPerPage}
+            setFilesPerPage={setFilesPerPage}
+            isDarkMode={theme === "dark"}
+            setIsDarkMode={(dark) => setTheme(dark ? "dark" : "light")}
+          />
+        </div>
       </div>
       
       {error ? (
@@ -218,118 +356,39 @@ export function FilesTable({
         </div>
       ) : (
         <>
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>유형</TableHead>
-                  <TableHead>
-                    <button
-                      className="flex items-center hover:text-gray-700"
-                      onClick={() => handleSort("name")}
-                    >
-                      파일명 {getSortIcon("name")}
-                    </button>
-                  </TableHead>
-                  <TableHead>
-                    <button
-                      className="flex items-center hover:text-gray-700"
-                      onClick={() => handleSort("size")}
-                    >
-                      크기 {getSortIcon("size")}
-                    </button>
-                  </TableHead>
-                  <TableHead>
-                    <button
-                      className="flex items-center hover:text-gray-700"
-                      onClick={() => handleSort("createdAt")}
-                    >
-                      생성일 {getSortIcon("createdAt")}
-                    </button>
-                  </TableHead>
-                  <TableHead>
-                    <button
-                      className="flex items-center hover:text-gray-700"
-                      onClick={() => handleSort("updatedAt")}
-                    >
-                      수정일 {getSortIcon("updatedAt")}
-                    </button>
-                  </TableHead>
-                  <TableHead className="w-[100px]">관리</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {currentFiles.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center">
-                      {searchTerm ? "검색 결과가 없습니다." : "파일이 없습니다."}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  currentFiles.map((file) => (
-                    <TableRow key={file.path}>
-                      <TableCell>{getFileIcon(file.type)}</TableCell>
-                      <TableCell>
-                        <button
-                          className="hover:underline text-left"
-                          onClick={() => handleFileClick(file)}
-                        >
-                          {file.name}
-                        </button>
-                      </TableCell>
-                      <TableCell>{formatFileSize(file.size)}</TableCell>
-                      <TableCell>{formatDate(file.createdAt)}</TableCell>
-                      <TableCell>{formatDate(file.updatedAt)}</TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuLabel>작업</DropdownMenuLabel>
-                            <DropdownMenuItem onClick={() => handleFileClick(file)}>
-                              <Info className="mr-2 h-4 w-4" />
-                              상세 정보
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
+          {viewMode === "list" && renderListView()}
+          {viewMode === "grid" && renderGridView()}
+          {viewMode === "card" && renderCardView()}
 
           {totalPages > 1 && (
-            <Pagination className="mt-4">
-              <PaginationContent>
-                <PaginationItem>
-                  <PaginationPrevious
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                    disabled={currentPage === 1}
-                  />
-                </PaginationItem>
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                  <PaginationItem key={page}>
-                    <PaginationLink
-                      onClick={() => setCurrentPage(page)}
-                      isActive={currentPage === page}
-                    >
-                      {page}
-                    </PaginationLink>
-                  </PaginationItem>
-                ))}
-                <PaginationItem>
-                  <PaginationNext
-                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                    disabled={currentPage === totalPages}
-                  />
-                </PaginationItem>
-              </PaginationContent>
-            </Pagination>
+            <div className="flex justify-center gap-2 mt-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+              >
+                이전
+              </Button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                <Button
+                  key={page}
+                  variant={currentPage === page ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setCurrentPage(page)}
+                >
+                  {page}
+                </Button>
+              ))}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+              >
+                다음
+              </Button>
+            </div>
           )}
         </>
       )}
