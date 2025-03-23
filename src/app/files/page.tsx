@@ -72,6 +72,12 @@ export default function FilesPage() {
   }, [pathParam]);
 
   const handlePathSelect = async (path: string, type: "directory" | "file", fileType?: string) => {
+    // ZIP 파일인 경우 경로를 변경하지 않고 ZIP 파일 내용을 표시
+    if (type === "file" && fileType === "application/zip") {
+      router.push(`/files?path=${encodeURIComponent(path)}&zip=true`);
+      return;
+    }
+    
     // 디렉토리인 경우에만 경로 변경
     if (type === "directory") {
       router.push(`/files?path=${encodeURIComponent(path)}`);

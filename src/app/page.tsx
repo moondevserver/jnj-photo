@@ -1,27 +1,75 @@
-import Link from 'next/link'
+"use client";
+
+import { useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { DirectoryTree } from "@/components/files/directory-tree";
+import { FilesTable } from "@/components/files/files-table";
+
+interface FileInfo {
+  name: string;
+  path: string;
+  size: number;
+  type: string;
+  createdAt: string;
+  updatedAt: string;
+  metadata?: {
+    takenAt?: string;
+    location?: {
+      latitude: number;
+      longitude: number;
+    };
+    dimensions?: {
+      width: number;
+      height: number;
+    };
+    camera?: {
+      make?: string;
+      model?: string;
+    };
+  };
+}
 
 export default function Home() {
-  return (
-    <main className="min-h-screen p-8">
-      <h1 className="text-4xl font-bold mb-8">Next.js + postgreSQL + GraphQL Demo</h1>
-      
-      <div className="grid gap-4">
-        <Link 
-          href="/posts" 
-          className="p-4 border rounded-lg hover:bg-gray-100 transition-colors"
-        >
-          <h2 className="text-2xl font-semibold mb-2">📝 Posts</h2>
-          <p className="text-gray-600">View and manage blog posts</p>
-        </Link>
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const currentPath = searchParams.get("path") || "/nas/photo";
+  const [selectedFile, setSelectedFile] = useState<FileInfo | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
 
-        <Link 
-          href="/graphql-test" 
-          className="p-4 border rounded-lg hover:bg-gray-100 transition-colors"
-        >
-          <h2 className="text-2xl font-semibold mb-2">🔍 GraphQL Playground</h2>
-          <p className="text-gray-600">Test GraphQL queries and mutations</p>
-        </Link>
+  const handleFileSelect = (file: FileInfo | null) => {
+    setSelectedFile(file);
+    if (file?.type === "application/zip") {
+      // ZIP 파일인 경우 zip=true 파라미터를 추가하여 경로 변경
+      const params = new URLSearchParams();
+      params.set("path", file.path);
+      params.set("zip", "true");
+      router.push(`/?${params.toString()}`);
+      setIsDetailOpen(false);
+    } else if (file?.type === "directory") {
+      // 디렉토리인 경우 일반 경로로 변경
+      const params = new URLSearchParams();
+      params.set("path", file.path);
+      router.push(`/?${params.toString()}`);
+      setIsDetailOpen(false);
+    } else {
+      setIsDetailOpen(true);
+    }
+  };
+
+  return (
+    <div className="flex h-screen">
+      <div className="w-1/4 p-4 border-r">
+        <DirectoryTree onFileSelect={handleFileSelect} />
       </div>
-    </main>
-  )
+      <div className="flex-1 p-4">
+        <FilesTable
+          path={currentPath}
+          selectedFile={selectedFile}
+          setSelectedFile={handleFileSelect}
+          isDetailOpen={isDetailOpen}
+          setIsDetailOpen={setIsDetailOpen}
+        />
+      </div>
+    </div>
+  );
 } 

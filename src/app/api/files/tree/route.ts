@@ -2,16 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import * as fs from "fs";
 import * as path from "path";
 
-const ROOT_PATH = "/nas/photo";
+const SUPPORTED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif", ".zip"];
 const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif"];
-
-interface TreeNode {
-  name: string;
-  path: string;
-  type: "directory" | "file";
-  children?: TreeNode[];
-  fileType?: string;
-}
+const EXCLUDED_DIRECTORIES = ['@eaDir', '#recycle'];
+const ROOT_PATHS = ['/nas/photo', '/nas/image'];
 
 function getMimeType(ext: string): string {
   const mimeTypes: { [key: string]: string } = {
@@ -19,18 +13,60 @@ function getMimeType(ext: string): string {
     ".jpeg": "image/jpeg",
     ".png": "image/png",
     ".gif": "image/gif",
+    ".zip": "application/zip",
   };
   return mimeTypes[ext.toLowerCase()] || "application/octet-stream";
 }
 
-function buildDirectoryTree(dirPath: string): TreeNode {
+interface DirectoryEntry {
+  name: string;
+  path: string;
+  type: "directory" | "file";
+  fileType?: string;
+  children?: DirectoryEntry[];
+}
+
+function buildDirectoryTree(dirPath: string): DirectoryEntry | null {
   try {
     const stats = fs.statSync(dirPath);
     const name = path.basename(dirPath);
 
-    if (!stats.isDirectory()) {
+    // 시스템 폴더 제외
+    if (EXCLUDED_DIRECTORIES.includes(name)) {
+      return null;
+    }
+
+    if (stats.isDirectory()) {
+      const children: DirectoryEntry[] = [];
+      const entries = fs.readdirSync(dirPath);
+
+      for (const entry of entries) {
+        const fullPath = path.join(dirPath, entry);
+        const childEntry = buildDirectoryTree(fullPath);
+        if (childEntry) {
+          children.push(childEntry);
+        }
+      }
+
+      // 디렉토리 내의 파일/폴더를 이름순으로 정렬
+      children.sort((a, b) => {
+        // 폴더를 파일보다 먼저 표시
+        if (a.type !== b.type) {
+          return a.type === "directory" ? -1 : 1;
+        }
+        // 같은 타입인 경우 이름순 정렬
+        return a.name.localeCompare(b.name, 'ko');
+      });
+
+      return {
+        name,
+        path: dirPath,
+        type: "directory",
+        children,
+      };
+    } else {
       const ext = path.extname(dirPath).toLowerCase();
-      if (IMAGE_EXTENSIONS.includes(ext)) {
+      if (SUPPORTED_EXTENSIONS.includes(ext)) {
         return {
           name,
           path: dirPath,
@@ -38,58 +74,31 @@ function buildDirectoryTree(dirPath: string): TreeNode {
           fileType: getMimeType(ext),
         };
       }
-      return null as any; // 이미지가 아닌 파일은 무시
     }
-
-    const children: TreeNode[] = [];
-    const entries = fs.readdirSync(dirPath);
-
-    for (const entry of entries) {
-      // 시스템 폴더 제외
-      if (entry === "@eaDir" || entry === "#recycle") {
-        continue;
-      }
-
-      const fullPath = path.join(dirPath, entry);
-      try {
-        const child = buildDirectoryTree(fullPath);
-        if (child) {
-          children.push(child);
-        }
-      } catch (error) {
-        console.error(`Error processing ${fullPath}:`, error);
-        // 개별 파일/디렉토리 오류는 무시하고 계속 진행
-      }
-    }
-
-    return {
-      name,
-      path: dirPath,
-      type: "directory",
-      children: children.length > 0 ? children : undefined,
-    };
   } catch (error) {
-    console.error(`Error building tree for ${dirPath}:`, error);
-    throw error;
+    console.error(`Error processing path ${dirPath}:`, error);
   }
+  return null;
 }
 
 export async function GET() {
   try {
-    // 루트 디렉토리가 존재하는지 확인
-    if (!fs.existsSync(ROOT_PATH)) {
-      return NextResponse.json(
-        { error: "Root directory not found" },
-        { status: 404 }
-      );
+    const rootEntries: DirectoryEntry[] = [];
+
+    for (const rootPath of ROOT_PATHS) {
+      if (fs.existsSync(rootPath)) {
+        const tree = buildDirectoryTree(rootPath);
+        if (tree) {
+          rootEntries.push(tree);
+        }
+      }
     }
 
-    const tree = buildDirectoryTree(ROOT_PATH);
-    return NextResponse.json(tree);
+    return NextResponse.json(rootEntries);
   } catch (error) {
-    console.error("Error in GET /api/files/tree:", error);
+    console.error("Error building directory tree:", error);
     return NextResponse.json(
-      { error: "Failed to read directory" },
+      { error: "Failed to build directory tree" },
       { status: 500 }
     );
   }

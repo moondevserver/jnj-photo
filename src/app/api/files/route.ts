@@ -16,12 +16,18 @@ interface FileInfo {
   createdAt: string;
   updatedAt: string;
   metadata?: {
-    width?: number;
-    height?: number;
     takenAt?: string;
     location?: {
       latitude: number;
       longitude: number;
+    };
+    dimensions?: {
+      width: number;
+      height: number;
+    };
+    camera?: {
+      make?: string;
+      model?: string;
     };
   };
 }
@@ -96,35 +102,13 @@ async function extractImageMetadata(filePath: string) {
   }
 }
 
-async function getFileStats(filePath: string) {
-  try {
-    const stats = fs.statSync(filePath);
-    const type = mime.lookup(filePath) || "application/octet-stream";
-    const isImage = IMAGE_EXTENSIONS.includes(path.extname(filePath).toLowerCase());
-    
-    const metadata = isImage ? await extractImageMetadata(filePath) : null;
-    
-    return {
-      name: path.basename(filePath),
-      path: filePath,
-      size: stats.size,
-      type,
-      createdAt: stats.birthtime.toISOString(),
-      updatedAt: stats.mtime.toISOString(),
-      metadata,
-    };
-  } catch (error) {
-    console.error(`Error getting stats for file ${filePath}:`, error);
-    throw error;
-  }
-}
-
 function getMimeType(ext: string): string {
   const mimeTypes: { [key: string]: string } = {
     ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg",
     ".png": "image/png",
     ".gif": "image/gif",
+    ".zip": "application/zip",
   };
   return mimeTypes[ext.toLowerCase()] || "application/octet-stream";
 }
@@ -132,14 +116,7 @@ function getMimeType(ext: string): string {
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const dirPath = searchParams.get("path");
-
-    if (!dirPath) {
-      return NextResponse.json(
-        { error: "Path parameter is required" },
-        { status: 400 }
-      );
-    }
+    const dirPath = searchParams.get("path") || "/nas/photo";
 
     // 디렉토리 존재 여부 확인
     if (!fs.existsSync(dirPath)) {
@@ -149,22 +126,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 디렉토리 읽기 권한 확인
-    try {
-      fs.accessSync(dirPath, fs.constants.R_OK);
-    } catch (error) {
-      return NextResponse.json(
-        { error: "No read permission for directory" },
-        { status: 403 }
-      );
-    }
-
     const files = fs.readdirSync(dirPath);
     const fileInfos: FileInfo[] = [];
 
     for (const file of files) {
       // 시스템 폴더 제외
-      if (file === "@eaDir" || file === "#recycle") {
+      if (EXCLUDED_DIRECTORIES.includes(file)) {
         continue;
       }
 
@@ -176,6 +143,7 @@ export async function GET(request: NextRequest) {
         if (!stats.isDirectory()) {
           const ext = path.extname(file).toLowerCase();
           if (IMAGE_EXTENSIONS.includes(ext)) {
+            const metadata = await extractImageMetadata(fullPath);
             fileInfos.push({
               name: file,
               path: fullPath,
@@ -183,6 +151,7 @@ export async function GET(request: NextRequest) {
               type: getMimeType(ext),
               createdAt: stats.birthtime.toISOString(),
               updatedAt: stats.mtime.toISOString(),
+              metadata,
             });
           } else if (ext === ".zip") {
             fileInfos.push({

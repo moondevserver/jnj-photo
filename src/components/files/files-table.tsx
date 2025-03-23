@@ -51,6 +51,14 @@ interface FileInfo {
       latitude: number;
       longitude: number;
     };
+    dimensions?: {
+      width: number;
+      height: number;
+    };
+    camera?: {
+      make?: string;
+      model?: string;
+    };
   };
   isZipEntry?: boolean;
   zipPath?: string;
@@ -97,6 +105,8 @@ export function FilesTable({
   isDetailOpen, 
   setIsDetailOpen 
 }: FilesTableProps) {
+  const searchParams = useSearchParams();
+  const isZipView = searchParams.get("zip") === "true";
   const [files, setFiles] = useState<FileInfo[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -107,16 +117,35 @@ export function FilesTable({
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [filesPerPage, setFilesPerPage] = useState(DEFAULT_FILES_PER_PAGE);
   const { theme, setTheme } = useTheme();
-  const [zipEntries, setZipEntries] = useState<ZipEntry[]>([]);
-  const [selectedZipFile, setSelectedZipFile] = useState<FileInfo | null>(null);
 
   const loadFiles = async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await fetchFiles(path);
-      setFiles(data);
-      setCurrentPage(1); // 새로운 데이터를 불러올 때 첫 페이지로 이동
+      if (isZipView) {
+        // ZIP 파일 내용 로드
+        const response = await fetch(`/api/files/zip?path=${encodeURIComponent(path)}`);
+        if (!response.ok) throw new Error("Failed to fetch ZIP contents");
+        const entries = await response.json();
+        const zipFiles: FileInfo[] = entries.map((entry: ZipEntry) => ({
+          name: entry.name,
+          path: entry.path,
+          size: entry.size,
+          type: entry.type,
+          createdAt: new Date().toISOString(), // ZIP 내부 파일의 생성일은 알 수 없음
+          updatedAt: new Date().toISOString(),
+          isZipEntry: true,
+          zipPath: path,
+        }));
+        setFiles(zipFiles);
+      } else {
+        // 일반 디렉토리 내용 로드
+        const data = await fetchFiles(path);
+        // ZIP 파일은 제외
+        const filteredData = data.filter(file => file.type !== "application/zip");
+        setFiles(filteredData);
+      }
+      setCurrentPage(1);
     } catch (error) {
       console.error("Error fetching files:", error);
       setError(error instanceof Error ? error.message : "파일 목록을 불러올 수 없습니다");
@@ -128,7 +157,7 @@ export function FilesTable({
 
   useEffect(() => {
     loadFiles();
-  }, [path]);
+  }, [path, isZipView]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -180,33 +209,7 @@ export function FilesTable({
   const currentFiles = sortedFiles.slice(startIndex, endIndex);
 
   const handleFileClick = async (file: FileInfo) => {
-    if (file.type === "application/zip") {
-      try {
-        const response = await fetch(`/api/files/zip?path=${encodeURIComponent(file.path)}`);
-        if (!response.ok) throw new Error("Failed to fetch ZIP contents");
-        const entries = await response.json();
-        setZipEntries(entries);
-        setSelectedZipFile(file);
-      } catch (error) {
-        console.error("Error fetching ZIP contents:", error);
-      }
-    } else {
-      setSelectedFile(file);
-      setIsDetailOpen(true);
-    }
-  };
-
-  const handleZipEntryClick = (entry: ZipEntry) => {
-    setSelectedFile({
-      name: entry.name,
-      path: entry.path,
-      size: entry.size,
-      type: entry.type,
-      createdAt: selectedZipFile?.createdAt || "",
-      updatedAt: selectedZipFile?.updatedAt || "",
-      isZipEntry: true,
-      zipPath: selectedZipFile?.path || "",
-    });
+    setSelectedFile(file);
     setIsDetailOpen(true);
   };
 
@@ -327,40 +330,6 @@ export function FilesTable({
           </TableBody>
         </Table>
       </div>
-
-      {selectedZipFile && zipEntries.length > 0 && (
-        <div className="rounded-md border bg-gray-50 p-4">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold">
-              {selectedZipFile.name} 내용
-            </h3>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setSelectedZipFile(null);
-                setZipEntries([]);
-              }}
-            >
-              닫기
-            </Button>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-            {zipEntries.map((entry) => (
-              <button
-                key={entry.path}
-                className="p-2 rounded hover:bg-white text-center group"
-                onClick={() => handleZipEntryClick(entry)}
-              >
-                {getFileIcon(entry.type, entry.path, true, selectedZipFile?.path)}
-                <div className="mt-2 text-sm truncate group-hover:text-blue-600">
-                  {entry.name}
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 
