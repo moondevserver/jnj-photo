@@ -41,6 +41,10 @@ interface FileInfo {
   };
 }
 
+interface FilesTableProps {
+  path: string;
+}
+
 async function getFiles(path: string): Promise<FileInfo[]> {
   const protocol = window.location.protocol;
   const host = window.location.host;
@@ -56,7 +60,7 @@ async function getFiles(path: string): Promise<FileInfo[]> {
   return res.json();
 }
 
-export function FilesTable() {
+export function FilesTable({ path }: FilesTableProps) {
   const searchParams = useSearchParams();
   const [files, setFiles] = useState<FileInfo[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -65,22 +69,23 @@ export function FilesTable() {
   const [selectedFile, setSelectedFile] = useState<FileInfo | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
 
-  const path = searchParams.get("path") || "/app/photo";
-
   useEffect(() => {
-    const fetchFiles = async () => {
+    async function fetchFiles() {
+      setIsLoading(true);
       try {
-        setIsLoading(true);
-        const data = await getFiles(path);
+        const response = await fetch(`/api/files?path=${encodeURIComponent(path)}`);
+        if (!response.ok) {
+          throw new Error("Failed to fetch files");
+        }
+        const data = await response.json();
         setFiles(data);
-        setError(null);
-      } catch (err) {
-        console.error("Error fetching files:", err);
-        setError("파일 목록을 불러오는데 실패했습니다.");
+      } catch (error) {
+        console.error("Error fetching files:", error);
+        setError(error instanceof Error ? error.message : "알 수 없는 오류가 발생했습니다");
       } finally {
         setIsLoading(false);
       }
-    };
+    }
 
     fetchFiles();
   }, [path]);

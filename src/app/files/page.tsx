@@ -1,23 +1,35 @@
-import { Metadata } from "next";
-import { FilesTable } from "@/components/files/files-table";
-import { DirectorySelect } from "@/components/files/directory-select";
+"use client";
 
-export const metadata: Metadata = {
-  title: "파일 목록",
-  description: "NAS에 저장된 이미지 파일들을 조회합니다.",
-};
+import { useEffect, useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { DirectoryTree } from "@/components/files/directory-tree";
+import { FilesTable } from "@/components/files/files-table";
+
+const ROOT_PATH = "/nas/photo";
 
 export default function FilesPage() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const currentPath = searchParams.get("path") || ROOT_PATH;
+
+  const handlePathSelect = (path: string) => {
+    router.push(`/files?path=${encodeURIComponent(path)}`);
+  };
+
   return (
-    <div className="flex flex-col gap-5 p-8">
-      <div>
-        <h2 className="text-3xl font-bold tracking-tight">파일 목록</h2>
-        <p className="text-muted-foreground">
-          NAS에 저장된 이미지 파일들을 조회하고 관리할 수 있습니다.
-        </p>
+    <div className="container mx-auto py-6">
+      <h1 className="text-2xl font-bold mb-6">파일 목록</h1>
+      <div className="grid grid-cols-[300px_1fr] gap-6">
+        <div className="sticky top-6">
+          <DirectoryTree
+            onSelect={handlePathSelect}
+            selectedPath={currentPath}
+          />
+        </div>
+        <div>
+          <FilesTable path={currentPath} />
+        </div>
       </div>
-      <DirectorySelect />
-      <FilesTable />
     </div>
   );
 } 

@@ -1,11 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
-import { promises as fs } from "fs";
+import * as fs from "fs";
 import path from "path";
 import mime from "mime-types";
 import * as exifr from 'exifr';
 
 const SUPPORTED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif", ".zip"];
 const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif"];
+
+interface FileInfo {
+  name: string;
+  path: string;
+  size: number;
+  type: string;
+  createdAt: string;
+  updatedAt: string;
+  metadata?: {
+    width?: number;
+    height?: number;
+    takenAt?: string;
+    location?: {
+      latitude: number;
+      longitude: number;
+    };
+  };
+}
 
 async function extractImageMetadata(filePath: string) {
   try {
@@ -83,7 +101,7 @@ async function extractImageMetadata(filePath: string) {
 
 async function getFileStats(filePath: string) {
   try {
-    const stats = await fs.stat(filePath);
+    const stats = fs.statSync(filePath);
     const type = mime.lookup(filePath) || "application/octet-stream";
     const isImage = IMAGE_EXTENSIONS.includes(path.extname(filePath).toLowerCase());
     
@@ -104,6 +122,17 @@ async function getFileStats(filePath: string) {
   }
 }
 
+function getMimeType(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase();
+  const mimeTypes: { [key: string]: string } = {
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.gif': 'image/gif',
+  };
+  return mimeTypes[ext] || 'application/octet-stream';
+}
+
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
@@ -113,77 +142,59 @@ export async function GET(request: NextRequest) {
 
     if (!dirPath) {
       return NextResponse.json(
-        { error: "Directory path is required" },
+        { error: "Path parameter is required" },
         { status: 400 }
       );
     }
 
-    // 현재 작업 디렉토리 확인
-    const cwd = process.cwd();
-    console.log("Current working directory:", cwd);
-
-    // 디렉토리 존재 여부 확인
-    try {
-      const dirStats = await fs.stat(dirPath);
-      console.log("Directory stats:", {
-        isDirectory: dirStats.isDirectory(),
-        permissions: dirStats.mode.toString(8),
-        uid: dirStats.uid,
-        gid: dirStats.gid
-      });
-
-      if (!dirStats.isDirectory()) {
-        return NextResponse.json(
-          { error: "Path is not a directory" },
-          { status: 400 }
-        );
-      }
-    } catch (error) {
-      console.error("Error accessing directory:", error);
+    // 디렉토리가 존재하는지 확인
+    if (!fs.existsSync(dirPath)) {
+      console.error(`Directory not found: ${dirPath}`);
       return NextResponse.json(
-        { 
-          error: "Directory not found or permission denied",
-          details: error instanceof Error ? error.message : String(error)
-        },
+        { error: `Directory not found: ${dirPath}` },
         { status: 404 }
       );
     }
 
-    // 디렉토리 내 파일 목록 가져오기
-    console.log("Reading directory contents...");
-    const files = await fs.readdir(dirPath);
-    console.log("Found files:", files);
-    
-    // 지원하는 확장자를 가진 파일만 필터링
-    const supportedFiles = files.filter(file => {
-      const ext = path.extname(file).toLowerCase();
-      const isSupported = SUPPORTED_EXTENSIONS.includes(ext);
-      console.log(`File ${file}: extension ${ext}, supported: ${isSupported}`);
-      return isSupported;
-    });
+    // 디렉토리 접근 권한 확인
+    try {
+      fs.accessSync(dirPath, fs.constants.R_OK);
+    } catch (error) {
+      console.error(`Permission denied for directory: ${dirPath}`, error);
+      return NextResponse.json(
+        { error: `Permission denied for directory: ${dirPath}` },
+        { status: 403 }
+      );
+    }
 
-    console.log("Supported files:", supportedFiles);
+    // 디렉토리 내용 읽기
+    const items = fs.readdirSync(dirPath);
+    console.log(`Found ${items.length} items in directory`);
 
-    // 각 파일의 상세 정보 가져오기
-    const fileInfos = await Promise.all(
-      supportedFiles.map(async (file) => {
-        const filePath = path.join(dirPath, file);
-        try {
-          return await getFileStats(filePath);
-        } catch (error) {
-          console.error(`Error processing file ${file}:`, error);
-          return null;
+    const files: FileInfo[] = [];
+
+    for (const item of items) {
+      const fullPath = path.join(dirPath, item);
+      try {
+        const stats = fs.statSync(fullPath);
+
+        if (stats.isFile()) {
+          // 이미지 파일만 포함
+          const ext = path.extname(item).toLowerCase();
+          if (['.jpg', '.jpeg', '.png', '.gif'].includes(ext)) {
+            const fileInfo = await getFileStats(fullPath);
+            files.push(fileInfo);
+          }
         }
-      })
-    );
+      } catch (error) {
+        console.error(`Error processing file ${fullPath}:`, error);
+        // 개별 파일 오류는 건너뛰고 계속 진행
+        continue;
+      }
+    }
 
-    // null 값 제거 및 정렬
-    const validFileInfos = fileInfos
-      .filter((info): info is NonNullable<typeof info> => info !== null)
-      .sort((a, b) => a.name.localeCompare(b.name));
-
-    console.log("Returning file infos:", validFileInfos);
-    return NextResponse.json(validFileInfos);
+    console.log(`Returning ${files.length} files`);
+    return NextResponse.json(files);
   } catch (error) {
     console.error("Error reading directory:", error);
     return NextResponse.json(
