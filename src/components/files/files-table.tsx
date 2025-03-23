@@ -52,6 +52,15 @@ interface FileInfo {
       longitude: number;
     };
   };
+  isZipEntry?: boolean;
+  zipPath?: string;
+}
+
+interface ZipEntry {
+  name: string;
+  path: string;
+  size: number;
+  type: string;
 }
 
 interface FilesTableProps {
@@ -98,6 +107,8 @@ export function FilesTable({
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [filesPerPage, setFilesPerPage] = useState(DEFAULT_FILES_PER_PAGE);
   const { theme, setTheme } = useTheme();
+  const [zipEntries, setZipEntries] = useState<ZipEntry[]>([]);
+  const [selectedZipFile, setSelectedZipFile] = useState<FileInfo | null>(null);
 
   const loadFiles = async () => {
     setIsLoading(true);
@@ -168,13 +179,52 @@ export function FilesTable({
   const endIndex = startIndex + filesPerPage;
   const currentFiles = sortedFiles.slice(startIndex, endIndex);
 
-  const handleFileClick = (file: FileInfo) => {
-    setSelectedFile(file);
+  const handleFileClick = async (file: FileInfo) => {
+    if (file.type === "application/zip") {
+      try {
+        const response = await fetch(`/api/files/zip?path=${encodeURIComponent(file.path)}`);
+        if (!response.ok) throw new Error("Failed to fetch ZIP contents");
+        const entries = await response.json();
+        setZipEntries(entries);
+        setSelectedZipFile(file);
+      } catch (error) {
+        console.error("Error fetching ZIP contents:", error);
+      }
+    } else {
+      setSelectedFile(file);
+      setIsDetailOpen(true);
+    }
+  };
+
+  const handleZipEntryClick = (entry: ZipEntry) => {
+    setSelectedFile({
+      name: entry.name,
+      path: entry.path,
+      size: entry.size,
+      type: entry.type,
+      createdAt: selectedZipFile?.createdAt || "",
+      updatedAt: selectedZipFile?.updatedAt || "",
+      isZipEntry: true,
+      zipPath: selectedZipFile?.path || "",
+    });
     setIsDetailOpen(true);
   };
 
-  const getFileIcon = (type: string, path: string) => {
+  const getFileIcon = (type: string, path: string, isZipEntry?: boolean, zipPath?: string) => {
     if (type.startsWith("image/")) {
+      if (isZipEntry && zipPath) {
+        return viewMode === "list" ? (
+          <Image className="h-4 w-4" />
+        ) : (
+          <div className="relative w-full aspect-square bg-gray-100 rounded overflow-hidden">
+            <img
+              src={`/api/files/zip/image?path=${encodeURIComponent(zipPath)}&entry=${encodeURIComponent(path)}`}
+              alt=""
+              className="object-cover w-full h-full"
+            />
+          </div>
+        );
+      }
       return viewMode === "list" ? (
         <Image className="h-4 w-4" />
       ) : (
@@ -192,89 +242,125 @@ export function FilesTable({
   };
 
   const renderListView = () => (
-    <div className="rounded-md border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>유형</TableHead>
-            <TableHead>
-              <button
-                className="flex items-center hover:text-gray-700"
-                onClick={() => handleSort("name")}
-              >
-                파일명 {getSortIcon("name")}
-              </button>
-            </TableHead>
-            <TableHead>
-              <button
-                className="flex items-center hover:text-gray-700"
-                onClick={() => handleSort("size")}
-              >
-                크기 {getSortIcon("size")}
-              </button>
-            </TableHead>
-            <TableHead>
-              <button
-                className="flex items-center hover:text-gray-700"
-                onClick={() => handleSort("createdAt")}
-              >
-                생성일 {getSortIcon("createdAt")}
-              </button>
-            </TableHead>
-            <TableHead>
-              <button
-                className="flex items-center hover:text-gray-700"
-                onClick={() => handleSort("updatedAt")}
-              >
-                수정일 {getSortIcon("updatedAt")}
-              </button>
-            </TableHead>
-            <TableHead className="w-[100px]">관리</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {currentFiles.length === 0 ? (
+    <div className="space-y-4">
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
             <TableRow>
-              <TableCell colSpan={6} className="text-center">
-                {searchTerm ? "검색 결과가 없습니다." : "파일이 없습니다."}
-              </TableCell>
+              <TableHead>유형</TableHead>
+              <TableHead>
+                <button
+                  className="flex items-center hover:text-gray-700"
+                  onClick={() => handleSort("name")}
+                >
+                  파일명 {getSortIcon("name")}
+                </button>
+              </TableHead>
+              <TableHead>
+                <button
+                  className="flex items-center hover:text-gray-700"
+                  onClick={() => handleSort("size")}
+                >
+                  크기 {getSortIcon("size")}
+                </button>
+              </TableHead>
+              <TableHead>
+                <button
+                  className="flex items-center hover:text-gray-700"
+                  onClick={() => handleSort("createdAt")}
+                >
+                  생성일 {getSortIcon("createdAt")}
+                </button>
+              </TableHead>
+              <TableHead>
+                <button
+                  className="flex items-center hover:text-gray-700"
+                  onClick={() => handleSort("updatedAt")}
+                >
+                  수정일 {getSortIcon("updatedAt")}
+                </button>
+              </TableHead>
+              <TableHead className="w-[100px]">관리</TableHead>
             </TableRow>
-          ) : (
-            currentFiles.map((file) => (
-              <TableRow key={file.path}>
-                <TableCell>{getFileIcon(file.type, file.path)}</TableCell>
-                <TableCell>
-                  <button
-                    className="hover:underline text-left"
-                    onClick={() => handleFileClick(file)}
-                  >
-                    {file.name}
-                  </button>
-                </TableCell>
-                <TableCell>{formatFileSize(file.size)}</TableCell>
-                <TableCell>{formatDate(file.createdAt)}</TableCell>
-                <TableCell>{formatDate(file.updatedAt)}</TableCell>
-                <TableCell>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" className="h-8 w-8 p-0">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuLabel>작업</DropdownMenuLabel>
-                      <DropdownMenuItem onClick={() => handleFileClick(file)}>
-                        <Info className="mr-2 h-4 w-4" />
-                        상세 정보
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+          </TableHeader>
+          <TableBody>
+            {currentFiles.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center">
+                  {searchTerm ? "검색 결과가 없습니다." : "파일이 없습니다."}
                 </TableCell>
               </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
+            ) : (
+              currentFiles.map((file) => (
+                <TableRow key={file.path}>
+                  <TableCell>{getFileIcon(file.type, file.path, file.isZipEntry, file.zipPath)}</TableCell>
+                  <TableCell>
+                    <button
+                      className="hover:underline text-left"
+                      onClick={() => handleFileClick(file)}
+                    >
+                      {file.name}
+                    </button>
+                  </TableCell>
+                  <TableCell>{formatFileSize(file.size)}</TableCell>
+                  <TableCell>{formatDate(file.createdAt)}</TableCell>
+                  <TableCell>{formatDate(file.updatedAt)}</TableCell>
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" className="h-8 w-8 p-0">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>작업</DropdownMenuLabel>
+                        <DropdownMenuItem onClick={() => handleFileClick(file)}>
+                          <Info className="mr-2 h-4 w-4" />
+                          상세 정보
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      {selectedZipFile && zipEntries.length > 0 && (
+        <div className="rounded-md border bg-gray-50 p-4">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold">
+              {selectedZipFile.name} 내용
+            </h3>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSelectedZipFile(null);
+                setZipEntries([]);
+              }}
+            >
+              닫기
+            </Button>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+            {zipEntries.map((entry) => (
+              <button
+                key={entry.path}
+                className="p-2 rounded hover:bg-white text-center group"
+                onClick={() => handleZipEntryClick(entry)}
+              >
+                {getFileIcon(entry.type, entry.path, true, selectedZipFile?.path)}
+                <div className="mt-2 text-sm truncate group-hover:text-blue-600">
+                  {entry.name}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -286,7 +372,7 @@ export function FilesTable({
           className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-center group"
           onClick={() => handleFileClick(file)}
         >
-          {getFileIcon(file.type, file.path)}
+          {getFileIcon(file.type, file.path, file.isZipEntry, file.zipPath)}
           <div className="mt-2 text-sm truncate group-hover:text-blue-600">{file.name}</div>
         </button>
       ))}
@@ -302,11 +388,7 @@ export function FilesTable({
           onClick={() => handleFileClick(file)}
         >
           <div className="relative aspect-video w-full bg-gray-100">
-            <img
-              src={`/api/files/image?path=${encodeURIComponent(file.path)}`}
-              alt=""
-              className="object-cover w-full h-full"
-            />
+            {getFileIcon(file.type, file.path, file.isZipEntry, file.zipPath)}
           </div>
           <div className="p-4 bg-white dark:bg-gray-800">
             <div className="font-medium truncate mb-1">{file.name}</div>

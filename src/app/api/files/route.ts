@@ -172,7 +172,7 @@ export async function GET(request: NextRequest) {
       try {
         const stats = fs.statSync(fullPath);
 
-        // 디렉토리는 제외하고 이미지 파일만 포함
+        // 디렉토리는 제외하고 이미지 파일과 ZIP 파일만 포함
         if (!stats.isDirectory()) {
           const ext = path.extname(file).toLowerCase();
           if (IMAGE_EXTENSIONS.includes(ext)) {
@@ -181,6 +181,15 @@ export async function GET(request: NextRequest) {
               path: fullPath,
               size: stats.size,
               type: getMimeType(ext),
+              createdAt: stats.birthtime.toISOString(),
+              updatedAt: stats.mtime.toISOString(),
+            });
+          } else if (ext === ".zip") {
+            fileInfos.push({
+              name: file,
+              path: fullPath,
+              size: stats.size,
+              type: "application/zip",
               createdAt: stats.birthtime.toISOString(),
               updatedAt: stats.mtime.toISOString(),
             });

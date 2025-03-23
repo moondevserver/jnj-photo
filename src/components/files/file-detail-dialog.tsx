@@ -35,6 +35,8 @@ interface FileDetailDialogProps {
         model?: string;
       };
     };
+    isZipEntry?: boolean;
+    zipPath?: string;
   } | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -96,7 +98,9 @@ export function FileDetailDialog({ file, open, onOpenChange }: FileDetailDialogP
           {isImage && (
             <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-gray-100">
               <Image
-                src={`/api/files/image?path=${encodeURIComponent(file.path)}`}
+                src={file.isZipEntry
+                  ? `/api/files/zip/image?path=${encodeURIComponent(file.zipPath || "")}&entry=${encodeURIComponent(file.path)}`
+                  : `/api/files/image?path=${encodeURIComponent(file.path)}`}
                 alt={file.name}
                 fill
                 className="object-contain"
