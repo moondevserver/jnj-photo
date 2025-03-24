@@ -5,7 +5,9 @@ import * as path from "path";
 const SUPPORTED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif", ".zip"];
 const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif"];
 const EXCLUDED_DIRECTORIES = ['@eaDir', '#recycle'];
-const ROOT_PATHS = ['/nas/photo', '/nas/image'];
+
+// 환경 변수에서 ROOT_PATHS 가져오기
+const ROOT_PATHS = process.env.NEXT_PUBLIC_ROOT_PATHS?.split(',') || ['/nas/photo', '/nas/image'];
 
 function getMimeType(ext: string): string {
   const mimeTypes: { [key: string]: string } = {

@@ -6,7 +6,8 @@ import { DirectoryTree } from "@/components/files/directory-tree";
 import { FilesTable } from "@/components/files/files-table";
 import { FileDetailDialog } from "@/components/files/file-detail-dialog";
 
-const ROOT_PATH = "/nas/photo";
+// 환경 변수에서 ROOT_PATHS 가져오기 (첫 번째 경로를 기본값으로 사용)
+const ROOT_PATH = process.env.NEXT_PUBLIC_ROOT_PATHS?.split(',')[0] || "/nas/photo";
 
 interface FileInfo {
   name: string;
